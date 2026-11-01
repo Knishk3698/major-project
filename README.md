@@ -1,101 +1,97 @@
 # RAG-Based Domain Expert Assistant
 
-A small Retrieval-Augmented Generation (RAG) demonstration. The app reads a PDF, finds the most relevant passages for a question, and asks a configured language model to answer from those passages. It also displays the passages and a basic word-overlap support estimate.
+A small Retrieval-Augmented Generation (RAG) application. It extracts text from a PDF, retrieves relevant passages, and asks a configured OpenAI-compatible language model to answer from those passages.
 
-## Project layout
+## Project contents
 
 ```text
-major/
-├── data/
-│   ├── documents/       # Source PDFs, including the NIST sample
-│   └── evaluation/      # Natural Questions QA sample
-├── vectorstore/         # Saved FAISS index and chunk metadata
-├── src/
-│   ├── pdf_processor.py # PDF text extraction and 500-word chunking
-│   ├── embedding.py     # 384-dimensional Sentence Transformer vectors
-│   └── retrieval.py    # FAISS build, save, load, and search functions
-├── app.py              # Streamlit user interface and answer generation
-├── test.py             # PDF extraction/chunking demonstration
-├── test_embeddings.py  # PDF-to-embedding smoke test
-└── download_dataset.py # Downloads the small QA evaluation sample
+data/
+  documents/nist_incident_response.pdf   NIST SP 800-61r3 sample document
+  evaluation/natural_questions.json      500 question-answer evaluation examples
+src/
+  pdf_processor.py                        PDF extraction and overlapping chunks
+  embedding.py                            Sentence Transformer embeddings
+  retrieval.py                            FAISS indexing, persistence, and search
+vectorstore/
+  chunks.faiss                             Prebuilt index for the NIST PDF
+  chunks.json                             Matching text and source/page metadata
+app.py                                    Streamlit application
+download_dataset.py                      Optional Natural Questions sample exporter
+test.py                                   PDF extraction and chunking check
+test_embedding.py                        PDF-to-embedding check
+test_embeddings.py                       PDF-to-embedding check
+requirements.txt                          Python dependencies
 ```
 
-## RAG information flow
+All paths used by the application and scripts are resolved from the repository location. The project does not require a particular local username, machine path, or checked-in virtual environment.
 
-1. The user uploads a PDF in Streamlit.
-2. PyMuPDF extracts text page by page. The processor creates chunks of up to about 500 words with 100 words of overlap and keeps the source filename and page number.
-3. Sentence Transformers (`all-MiniLM-L6-v2`) turns each chunk into a 384-number vector.
-4. FAISS stores normalized vectors for cosine-similarity search. The index and chunk metadata are saved in `vectorstore/`.
-5. The user asks a question. The same embedding model vectorizes it, and FAISS returns the three closest chunks.
-6. If an API endpoint is configured, the app sends the question and those passages to the LLM with instructions to use only that context. Retrieved passages and their page details remain visible in the app.
-7. The app shows a simple word-overlap estimate between the answer and retrieved context. It is only a rough clue; it is not a reliable or complete hallucination detector.
+## Windows setup
 
-## Technologies
-
-- Python
-- PyMuPDF for PDF text extraction
-- Sentence Transformers with `sentence-transformers/all-MiniLM-L6-v2`
-- FAISS CPU for local similarity search
-- Streamlit for the web interface
-- Hugging Face Datasets for the existing Natural Questions sample downloader
-- Requests for calls to an explicitly configured OpenAI-compatible chat-completions API
-
-## Setup
-
-The project uses its existing Windows virtual environment. From the project root, install the listed dependencies if needed:
+Install Git and 64-bit Python 3.10, including the Python Launcher (`py`). In PowerShell, run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+git clone https://github.com/Knishk3698/major-project.git
+cd major-project
+py -3.10 --version
+py -3.10 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-The first embedding run downloads `all-MiniLM-L6-v2` from Hugging Face. Keep the NIST sample at `data/documents/nist_incident_response.pdf`; the Natural Questions sample is stored at `data/evaluation/natural_questions.json`.
+If PowerShell blocks activation, use this command for the current terminal, then activate again:
 
-## Configure answer generation
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
 
-The project does not assume that you have an account or API key with a particular LLM provider. Choose an endpoint and model that you have access to and that accepts the OpenAI-compatible chat-completions request format, then create a local `.env` file in the project root containing:
+The first embedding run downloads `sentence-transformers/all-MiniLM-L6-v2` from Hugging Face. Allow network access to Hugging Face the first time, or pre-cache that model in the environment.
 
-```text
+## Configure your LLM
+
+Create a `.env` file in the repository root using your provider's own endpoint, key, and model. The URL must accept OpenAI-compatible chat-completions requests.
+
+```powershell
+@'
 LLM_API_URL=https://your-provider.example/v1/chat/completions
-LLM_API_KEY=your-own-key
-LLM_MODEL=your-model-name
+LLM_API_KEY=replace-with-your-own-key
+LLM_MODEL=replace-with-your-model
+'@ | Set-Content -Encoding ascii .env
 ```
 
-Replace all three example values with the endpoint, credential, and model supplied by your provider. Do not commit `.env` or share its key. No credentials are included in this project. Without these settings, PDF processing and retrieval still work, but answer generation reports that configuration is needed.
+Replace all three example values. `.env` is ignored by Git; never commit or share your credential. The app also reads these variables from the process environment. PDF processing and retrieval work without an LLM key, but generating an answer requires a configured endpoint.
 
 ## Run the application
 
-From the project root:
+From the repository root, with `.venv` activated:
 
 ```powershell
-.\.venv\Scripts\python.exe -m streamlit run app.py
+python -m streamlit run app.py
 ```
 
-Upload a PDF and select **Process document**. After processing, enter a question and select **Ask**. The app returns an answer when configured and expands the top three retrieved passages with their source pages.
+Open the local URL Streamlit prints. The checked-in vectorstore contains the NIST sample's chunks and is loaded when the app starts. You can also upload another PDF and select **Process document**; this replaces the local `vectorstore/chunks.faiss` and `vectorstore/chunks.json` with that PDF's index. Ask a question to see the retrieved passages and, when configured, an answer grounded in them.
 
-The local vectorstore contains `chunks.faiss` and `chunks.json`. Processing another PDF replaces those saved files with the new document's index.
+## Run the checks
 
-## Run component checks
-
-PDF extraction and chunking:
+Run these from the repository root:
 
 ```powershell
-.\.venv\Scripts\python.exe test.py
+python test.py
+python test_embedding.py
+python test_embeddings.py
 ```
 
-Embedding dimensions:
+`test.py` checks PDF extraction and chunk creation. The two embedding scripts encode the NIST PDF's chunks and verify that each vector has 384 dimensions. The embedding checks need the model download on first use. They do not call an LLM API. Answer generation in the app requires your configured external LLM service and API key.
 
-```powershell
-.\.venv\Scripts\python.exe .\test_embeddings.py
-```
+## Data and RAG pipeline
 
-The embedding check should report 384 dimensions. FAISS retrieval can also be exercised by processing a PDF in the app and asking a question. Answer generation requires your own configured API endpoint and credentials.
+The PDF pipeline is: PyMuPDF extracts text with page numbers; `chunk_text` makes overlapping chunks of up to 500 words; Sentence Transformers encodes each chunk into 384 values; FAISS stores L2-normalized vectors and searches them by inner product (cosine similarity). The matching chunk text, source filename, and page number are stored in `vectorstore/chunks.json`. The app embeds a question, retrieves up to three passages, and sends those passages and the question to the configured LLM.
 
-## File guide
+`data/evaluation/natural_questions.json` is a separate sample of 500 Natural Questions question-answer pairs. The app does **not** currently load or use this dataset for indexing, retrieval, prompting, or scoring. It is included for manual evaluation or future evaluation tooling. `download_dataset.py` can export a fresh 500-record sample from the `sentence-transformers/natural-questions` dataset on Hugging Face; it requires internet access and the `datasets` dependency. Running it replaces the tracked JSON sample, so review the result before committing.
 
-- `src/pdf_processor.py`: extracts page text and creates overlapping word chunks.
-- `src/embedding.py`: loads the pretrained embedding model and encodes text.
-- `src/retrieval.py`: builds cosine-similarity FAISS indexes and stores matching chunk metadata.
-- `app.py`: connects upload, processing, indexing, retrieval, answer generation, and the rough support estimate.
-- `test.py`: prints an extraction and chunking example from the NIST PDF.
-- `test_embeddings.py`: checks that each PDF chunk receives one 384-dimensional vector.
-- `download_dataset.py`: downloads 500 Natural Questions question-answer records for evaluation.
+The displayed word-overlap score is a rough lexical estimate of answer support, not a reliable hallucination detector. Review the retrieved passages alongside each answer.
+
+## Credentials and generated files
+
+`.venv/`, `.env`, Python bytecode, and `__pycache__/` are excluded by `.gitignore`. The PDF, evaluation JSON, source files, requirements, README, and prebuilt vectorstore are intentionally tracked. Do not add personal credentials or machine-specific paths to source files.

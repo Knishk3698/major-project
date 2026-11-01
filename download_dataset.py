@@ -1,4 +1,4 @@
-"""Stream 500 Natural Questions QA examples from Hugging Face Datasets."""
+"""Export 500 Natural Questions QA examples from Hugging Face Datasets."""
 
 import json
 import sys
@@ -22,8 +22,8 @@ def main() -> int:
     except ImportError:
         print(
             "ERROR: Hugging Face Datasets is not installed in this Python environment.\n"
-            "Install it in the project's .venv with:\n"
-            "  .\\.venv\\Scripts\\python.exe -m pip install datasets",
+            "Activate the project virtual environment and install requirements:\n"
+            "  python -m pip install -r requirements.txt",
             file=sys.stderr,
         )
         return 1
@@ -37,20 +37,25 @@ def main() -> int:
             streaming=True,
         )
 
-        # Inspect the dataset metadata before accessing any row values. The
-        # published `pair` config exposes `query` and `answer` text features.
+        # Dataset revisions use either `query` or `question` for the prompt
+        # field, so accept both published schemas.
         features = dataset.features
         feature_names = set(features.keys()) if features is not None else set()
         print(f"Detected dataset features: {', '.join(sorted(feature_names)) or '(unavailable)'}")
-        if not {"query", "answer"}.issubset(feature_names):
+        question_field = next(
+            (field for field in ("query", "question") if field in feature_names),
+            None,
+        )
+        if question_field is None or "answer" not in feature_names:
             raise ValueError(
                 "Unexpected dataset schema for config 'pair': expected 'query' "
-                f"and 'answer' features, found {sorted(feature_names)}"
+                "or 'question', plus 'answer' features, "
+                f"found {sorted(feature_names)}"
             )
 
         records = []
         for row in dataset.take(EXAMPLE_COUNT):
-            question = row["query"]
+            question = row[question_field]
             answer = row["answer"]
             if not isinstance(question, str) or not isinstance(answer, str):
                 raise ValueError("A dataset row has a non-text query or answer.")
