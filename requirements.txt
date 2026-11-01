@@ -1,0 +1,7 @@
+datasets
+faiss-cpu
+numpy
+PyMuPDF
+requests
+sentence-transformers
+streamlit
